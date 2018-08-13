@@ -7,7 +7,7 @@ namespace MailSender
     public static class Send
     {
         [FunctionName("Send")]
-        public static void Run([QueueTrigger("mailqueue", Connection = "UseDevelopmentStorage=true")]string queueItem, TraceWriter log)
+        public static void Run([QueueTrigger("mailqueue", Connection = "AzureWebJobsStorage")]string queueItem, TraceWriter log)
         {
             log.Info($"C# Queue trigger function processed: {queueItem}");
         }
