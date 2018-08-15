@@ -1,6 +1,7 @@
 ﻿using Microsoft.Azure;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Queue;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,8 +20,9 @@ namespace Trigger
             {
                 if (c.Key == ConsoleKey.S)
                 {
-                    Console.WriteLine(" -> Queuing message");
+                    Console.Write(" -> Queuing message... ");
                     QueueMessage();
+                    Console.WriteLine("Queued");
                 }
                 else
                 {
@@ -40,9 +42,27 @@ namespace Trigger
             var queue = queueClient.GetQueueReference(CloudConfigurationManager.GetSetting("QueueName"));
             queue.CreateIfNotExists();
 
-            var messageContent = DateTime.Now.Ticks.ToString();
-            var message = new CloudQueueMessage(messageContent);
-            queue.AddMessage(message);
+            var message = new MailSender.Message()
+            {
+                RecipientAddress = "csource@live.nl",
+                CheckBlacklist = true,
+                Lcid = 1033,
+                TemplateType = "CSource.Kayakers.Common.Enums.MailTemplateType:CPT_ReinviteForOfficial",
+            };
+
+            var model = new MailModel()
+            {
+                TournamentName = "Your tournament name",
+                FirstName = "invited.user@email.address",
+                InvitingOfficalName = "UsersFirstName",
+                CallbackUrl = "https://some.url.to.a/web-page",
+                RecipientAddress = message.RecipientAddress
+            };
+
+            message.SetModel(model);
+
+            var queueMessage = new CloudQueueMessage(message.ToJsonString());
+            queue.AddMessage(queueMessage);
         }
     }
 }
