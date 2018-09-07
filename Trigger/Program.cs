@@ -14,14 +14,22 @@ namespace Trigger
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Press Q to Quit and S to push a new mail send request into the queue.");
+            Console.WriteLine("Press Q to Quitm or:");
+            Console.WriteLine("1 to push a new mail send request into the queue: English with black list check");
+            Console.WriteLine("2 to push a new mail send request into the queue: English without black list check");
+            Console.WriteLine("3 to push a new mail send request into the queue: Dutch with black list check");
+            Console.WriteLine("4 to push a new mail send request into the queue: Dutch without black list check");
+
             var c = Console.ReadKey();
             while (c.Key != ConsoleKey.Q)
             {
-                if (c.Key == ConsoleKey.S)
+                if (c.KeyChar == '1' || c.KeyChar == '2' || c.KeyChar == '3' || c.KeyChar == '4')
                 {
-                    Console.Write(" -> Queuing message... ");
-                    QueueMessage();
+                    int lcid = (c.KeyChar == '1' || c.KeyChar == '2') ? 1033 : 1043;
+                    bool checkBlacklist = (c.KeyChar == '1' || c.KeyChar == '3') ? true : false;
+
+                    Console.Write($" -> Queuing message ({lcid},{checkBlacklist})... ");
+                    QueueMessage(lcid, checkBlacklist);
                     Console.WriteLine("Queued");
                 }
                 else
@@ -35,7 +43,7 @@ namespace Trigger
             Console.WriteLine("\r\n\r\nQuitting\r\n");
         }
 
-        private static void QueueMessage()
+        private static void QueueMessage(int lcid, bool checkBlacklist)
         {
             var storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("StorageConnectionString"));
             var queueClient = storageAccount.CreateCloudQueueClient();
@@ -44,9 +52,9 @@ namespace Trigger
 
             var message = new MailSender.Message()
             {
-                RecipientAddress = "csource@live.nl",
-                CheckBlacklist = true,
-                Lcid = 1033,
+                RecipientAddress = "abc@def.gh",
+                CheckBlacklist = checkBlacklist,
+                Lcid = lcid,
                 TemplateType = "CSource.Kayakers.Common.Enums.MailTemplateType:CPT_ReinviteForOfficial",
             };
 
