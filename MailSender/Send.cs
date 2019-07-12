@@ -25,7 +25,7 @@ namespace MailSender
         {
             log.Info("Queue trigger function processing queue item");
 
-            log.Verbose("Restoring queue messege object");
+            log.Verbose("Restoring queue message object");
             var message = Message.FromJsonString(queueItem);
             var model = message.GetModel();
             var modelType = model.GetType();
@@ -95,6 +95,65 @@ namespace MailSender
             log.Info("Queue trigger function processed queue item");
         }
 
+        [FunctionName("SendFailed")]
+        public static void RunPoison([QueueTrigger("mailqueue-poison", Connection = "AzureWebJobsStorage")]string queueItem, TraceWriter log)
+        {
+            log.Info("Queue trigger function processing queue-poison item");
+
+            log.Verbose("Restoring failed queue message object");
+            var failedMessage = Message.FromJsonString(queueItem);
+
+            string subject = "MailSender failed";
+
+            // Get the correct base e-mail html
+            var html = GetHtmlTemplate(false, 1033, log);
+            // Replace tokens in HTML
+            log.Verbose("Replacing tokens in html");
+            html = html.Replace("[[%SALUTION%]]", "Hi admin,");
+            html = html.Replace("[[%BODY%]]", "<p>MailSender failed to send an email message.<br><strong>Please check the failed messages as soon as possible!</strong></p>");
+            html = html.Replace("[[%BLACKLISTURL%]]", string.Empty);
+
+            log.Verbose("Creating mail message");
+            using (var mail = new MailMessage())
+            {
+                mail.From = new MailAddress(CloudConfigurationManager.GetSetting("SenderAddress"), CloudConfigurationManager.GetSetting("SenderName"));
+                mail.To.Add(new MailAddress(CloudConfigurationManager.GetSetting("FailedMailsRecipient")));
+                mail.BodyEncoding = System.Text.Encoding.UTF8;
+                mail.IsBodyHtml = true;
+                mail.Subject = subject;
+                mail.Body = html;
+
+                log.Verbose("Instantiating SMTP client");
+                int mailPort = int.Parse(CloudConfigurationManager.GetSetting("MailPort"));
+                using (var smtpClient = new SmtpClient(CloudConfigurationManager.GetSetting("MailHost"), mailPort))
+                {
+                    string mailServerUsername = CloudConfigurationManager.GetSetting("MailServerUsername");
+                    if (!string.IsNullOrWhiteSpace(mailServerUsername))
+                    {
+                        smtpClient.Credentials = new NetworkCredential(mailServerUsername, CloudConfigurationManager.GetSetting("MailServerPassword"));
+                    }
+
+                    log.Info("Sending mail");
+                    smtpClient.Send(mail);
+                }
+            }
+
+            var failedMail = new FailedMail(failedMessage.Lcid);
+            failedMail.TemplateType = failedMessage.TemplateType;
+            failedMail.Message = failedMessage != null ? failedMessage.ToJsonString() : null;
+            failedMail.Recipient = failedMessage.RecipientAddress;
+            failedMail.ExceptionMessage = null;
+            failedMail.ExceptionStackTrace = null;
+
+            var operation = TableOperation.Insert(failedMail);
+
+            var mailTable = tableClient.GetTableReference(CloudConfigurationManager.GetSetting("MailTableName"));
+            mailTable.CreateIfNotExists();
+            mailTable.Execute(operation);
+
+            log.Info("Queue trigger function processed queue-poison item");
+        }
+
         private static bool IsRecipientBlackListed(string recipientAddress, TraceWriter log)
         {
             log.Info($"Checking if recipient address {recipientAddress} is blacklisted");
@@ -152,8 +211,13 @@ namespace MailSender
 
         private static string GetHtmlTemplate(Message message, TraceWriter log)
         {
+            return GetHtmlTemplate(message.CheckBlacklist, message.Lcid, log);
+        }
+
+        private static string GetHtmlTemplate(bool checkBlacklist, int lcid, TraceWriter log)
+        {
             string htmlTemplate;
-            string htmlTemplateFilename = message.CheckBlacklist ? $"MailHTML-Public-{message.Lcid}.html" : $"MailHTML-Users-{message.Lcid}.html";
+            string htmlTemplateFilename = checkBlacklist ? $"MailHTML-Public-{lcid}.html" : $"MailHTML-Users-{lcid}.html";
             log.Info($"Retrieving email body html-file: {htmlTemplateFilename}");
 
             var assembly = Assembly.GetExecutingAssembly();
