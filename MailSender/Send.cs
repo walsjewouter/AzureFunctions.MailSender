@@ -18,7 +18,21 @@ namespace MailSender
 {
     public static class Send
     {
-        private static CloudTableClient tableClient;
+        private static CloudTableClient _tableClient;
+
+        private static CloudTableClient TableClient
+        {
+            get
+            {
+                if (_tableClient == null)
+                {
+                    var storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("StorageConnection"));
+                    _tableClient = storageAccount.CreateCloudTableClient();
+                }
+
+                return _tableClient;
+            }
+        }
 
         [FunctionName("Send")]
         public static void Run([QueueTrigger("mailqueue", Connection = "AzureWebJobsStorage")]string queueItem, TraceWriter log)
@@ -29,10 +43,6 @@ namespace MailSender
             var message = Message.FromJsonString(queueItem);
             var model = message.GetModel();
             var modelType = model.GetType();
-
-            log.Verbose("Instantiating table client");
-            var storageAccount = CloudStorageAccount.Parse(CloudConfigurationManager.GetSetting("StorageConnection"));
-            tableClient = storageAccount.CreateCloudTableClient();
 
             bool doSend = true;
             if (message.CheckBlacklist)
@@ -138,6 +148,7 @@ namespace MailSender
                 }
             }
 
+            log.Verbose("Creating FailedMail entity");
             var failedMail = new FailedMail(failedMessage.Lcid);
             failedMail.TemplateType = failedMessage.TemplateType;
             failedMail.Message = failedMessage != null ? failedMessage.ToJsonString() : null;
@@ -145,10 +156,15 @@ namespace MailSender
             failedMail.ExceptionMessage = null;
             failedMail.ExceptionStackTrace = null;
 
+            log.Verbose("Creating table operation");
             var operation = TableOperation.Insert(failedMail);
 
-            var mailTable = tableClient.GetTableReference(CloudConfigurationManager.GetSetting("MailTableName"));
+            string tableName = CloudConfigurationManager.GetSetting("MailTableName");
+            log.Verbose($"Retrieving mail table: '{tableName}'");
+            var mailTable = TableClient.GetTableReference(CloudConfigurationManager.GetSetting("MailTableName"));
             mailTable.CreateIfNotExists();
+
+            log.Verbose("Executing table operation");
             mailTable.Execute(operation);
 
             log.Info("Queue trigger function processed queue-poison item");
@@ -158,9 +174,12 @@ namespace MailSender
         {
             log.Info($"Checking if recipient address {recipientAddress} is blacklisted");
 
-            var blackListTable = tableClient.GetTableReference(CloudConfigurationManager.GetSetting("BlackListTableName"));
+            string tableName = CloudConfigurationManager.GetSetting("BlackListTableName");
+            log.Verbose($"Retrieving blacklist table: '{tableName}'");
+            var blackListTable = TableClient.GetTableReference(CloudConfigurationManager.GetSetting("BlackListTableName"));
             blackListTable.CreateIfNotExists();
 
+            log.Verbose("Retrieving entity");
             var retrieve = TableOperation.Retrieve<TableEntity>("Email", recipientAddress.ToLowerInvariant());
             var result = blackListTable.Execute(retrieve);
             return result.Result == null ? false : true;
@@ -178,15 +197,19 @@ namespace MailSender
 
             var engine = RazorEngineService.Create(config);
 
+            log.Verbose("Compiling: Subject");
             engine.AddTemplate("subject", new LoadedTemplateSource(template.Subject));
             engine.Compile("subject");
 
+            log.Verbose("Compiling: Salution");
             engine.AddTemplate("salution", new LoadedTemplateSource(template.Salution));
             engine.Compile("salution");
 
+            log.Verbose("Compiling: Body");
             engine.AddTemplate("body", new LoadedTemplateSource(template.Body));
             engine.Compile("body");
 
+            log.Info("Finished instantiating Razor engine");
             return engine;
         }
 
@@ -195,9 +218,11 @@ namespace MailSender
             log.Info($"Retrieving mail text parts for template type {message.TemplateType} for language {message.Lcid}");
 
             string tableName = CloudConfigurationManager.GetSetting("MailTableName");
-            var mailTable = tableClient.GetTableReference(tableName);
+            log.Verbose($"Retrieving mail table: '{tableName}'");
+            var mailTable = TableClient.GetTableReference(tableName);
             mailTable.CreateIfNotExists();
 
+            log.Verbose("Retrieving entity");
             var retrieve = TableOperation.Retrieve<MailTemplate>(MailTemplate.CreatePartitionKey(message.Lcid), message.TemplateType);
             var result = mailTable.Execute(retrieve);
 
