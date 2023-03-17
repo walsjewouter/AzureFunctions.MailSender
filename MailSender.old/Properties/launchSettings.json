@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "MailSender": {
+      "commandName": "Project"
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 namespace MailSender
 {
-    public class MailTemplate : TableEntity
+    public class MailTemplate
     {
         public MailTemplate()
         {
