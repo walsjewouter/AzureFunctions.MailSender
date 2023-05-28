@@ -14,28 +14,51 @@ namespace Trigger
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Press Q to Quitm or:");
+            Console.WriteLine("Press Q to Quit or:");
             Console.WriteLine("1 to push a new mail send request into the queue: English with black list check");
             Console.WriteLine("2 to push a new mail send request into the queue: English without black list check");
             Console.WriteLine("3 to push a new mail send request into the queue: Dutch with black list check");
             Console.WriteLine("4 to push a new mail send request into the queue: Dutch without black list check");
+            Console.WriteLine("5 to push a new mail send request into the queue: German with black list check");
+            Console.WriteLine("6 to push a new mail send request into the queue: German without black list check");
 
             var c = Console.ReadKey();
             while (c.Key != ConsoleKey.Q)
             {
-                if (c.KeyChar == '1' || c.KeyChar == '2' || c.KeyChar == '3' || c.KeyChar == '4')
+                int lcid;
+                switch (c.KeyChar)
                 {
-                    int lcid = (c.KeyChar == '1' || c.KeyChar == '2') ? 1033 : 1043;
-                    bool checkBlacklist = (c.KeyChar == '1' || c.KeyChar == '3') ? true : false;
+                    case '1':
+                    case '2':
+                        lcid = 1033;
+                        break;
 
-                    Console.Write($" -> Queuing message ({lcid},{checkBlacklist})... ");
-                    QueueMessage(lcid, checkBlacklist);
-                    Console.WriteLine("Queued");
+                    case '3':
+                    case '4':
+                        lcid = 1043;
+                        break;
+
+                    case '5':
+                    case '6':
+                        lcid = 1031;
+                        break;
+
+                    default:
+                        lcid = 0;
+                        break;
                 }
-                else
+
+                if (lcid == 0)
                 {
                     Console.WriteLine(" -> Invalid key pressed");
+                    continue;
                 }
+
+                bool checkBlacklist = c.KeyChar == '1' || c.KeyChar == '3' || c.KeyChar == '5';
+
+                Console.Write($" -> Queuing message ({lcid},{checkBlacklist})... ");
+                QueueMessage(lcid, checkBlacklist);
+                Console.WriteLine("Queued");
 
                 c = Console.ReadKey();
             }

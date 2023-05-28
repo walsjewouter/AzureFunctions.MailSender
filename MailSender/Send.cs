@@ -41,6 +41,8 @@ namespace MailSender
 
             log.Verbose("Restoring queue message object");
             var message = Message.FromJsonString(queueItem);
+            message.Lcid = message.Lcid == 1031 ? 1033 : message.Lcid;
+
             var model = message.GetModel();
             var modelType = model.GetType();
 
